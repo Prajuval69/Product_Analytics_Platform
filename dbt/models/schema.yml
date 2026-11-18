@@ -1,0 +1,678 @@
+version: 2
+models:
+- name: stg_users
+  description: One row per registered user; immutable signup plan.
+  columns:
+  - name: user_id
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+  - name: signup_at
+    description: Immutable registration timestamp.
+    tests:
+    - not_null
+  - name: plan
+    description: Immutable signup plan.
+    tests:
+    - accepted_values:
+        values:
+        - free
+        - starter
+        - pro
+        - enterprise
+  - name: acquisition_channel
+    description: Signup attribution.
+    tests:
+    - accepted_values:
+        values:
+        - organic
+        - paid_search
+        - referral
+        - social
+        - partner
+- name: stg_products
+  description: One row per synthetic SaaS product.
+  columns:
+  - name: product_id
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+- name: stg_features
+  description: One row per product-owned feature.
+  columns:
+  - name: feature_id
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+- name: stg_events
+  description: One row per event; UTC event dates; activity classification is canonical.
+  columns:
+  - name: event_id
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: user_id
+    description: Registered user natural key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_users')
+        field: user_id
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+  - name: feature_id
+    description: Optional feature natural key.
+    tests:
+    - relationships:
+        to: ref('stg_features')
+        field: feature_id
+  - name: event_at
+    description: UTC source timestamp.
+    tests:
+    - not_null
+  - name: event_type
+    description: Source event taxonomy.
+    tests:
+    - not_null
+    - accepted_values:
+        values:
+        - signup
+        - login
+        - onboarding_started
+        - onboarding_completed
+        - feature_viewed
+        - feature_used
+        - search
+        - report_created
+        - export_completed
+        - invite_sent
+        - invite_accepted
+        - upgrade_started
+        - purchase_completed
+        - support_opened
+        - churn_signal
+  - name: device
+    description: Client platform.
+    tests:
+    - accepted_values:
+        values:
+        - web
+        - ios
+        - android
+- name: stg_subscriptions
+  description: One row per subscription lifetime; at most one per user in this simulation.
+  columns:
+  - name: subscription_id
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: user_id
+    description: Registered user natural key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_users')
+        field: user_id
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+  - name: status
+    description: Current lifetime status.
+    tests:
+    - accepted_values:
+        values:
+        - active
+        - cancelled
+- name: stg_transactions
+  description: One row per invoice attempt; only succeeded attempts recognize revenue.
+  columns:
+  - name: transaction_id
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: user_id
+    description: Registered user natural key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_users')
+        field: user_id
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+  - name: subscription_id
+    description: Billed subscription.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_subscriptions')
+        field: subscription_id
+  - name: status
+    description: Invoice result.
+    tests:
+    - accepted_values:
+        values:
+        - succeeded
+        - failed
+- name: stg_support_tickets
+  description: One row per support interaction, possibly unresolved.
+  columns:
+  - name: ticket_id
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: user_id
+    description: Registered user natural key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_users')
+        field: user_id
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+  - name: priority
+    description: Support priority.
+    tests:
+    - accepted_values:
+        values:
+        - low
+        - medium
+        - high
+- name: int_user_daily_activity
+  description: One row per user, product and UTC active date.
+  columns:
+  - name: user_id
+    description: Registered user natural key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_users')
+        field: user_id
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+- name: int_user_feature_usage
+  description: One row per user, feature, calendar month and immutable signup plan.
+  columns:
+  - name: user_id
+    description: Registered user natural key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_users')
+        field: user_id
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+- name: int_user_sessions
+  description: One row per explicit source session, including non-active lifecycle
+    sessions.
+  columns:
+  - name: session_id
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: user_id
+    description: Registered user natural key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_users')
+        field: user_id
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+- name: int_user_funnel
+  description: One row per user with ordered 30-day funnel timestamps and 7-day activation
+    timestamp.
+  columns:
+  - name: user_id
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+    - relationships:
+        to: ref('stg_users')
+        field: user_id
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+- name: int_user_revenue
+  description: One row per user with successful lifetime billing revenue.
+  columns:
+  - name: user_id
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+    - relationships:
+        to: ref('stg_users')
+        field: user_id
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+- name: int_customer_health
+  description: One row per user, as of the configured history end; descriptive current-state
+    snapshot.
+  columns:
+  - name: user_id
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+    - relationships:
+        to: ref('stg_users')
+        field: user_id
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+- name: int_churn_features
+  description: One row per eligible user and cutoff date. Predictors observe trailing
+    30 days. The label observes only future 30 days; current scoring labels are null.
+  columns:
+  - name: user_id
+    description: Registered user natural key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_users')
+        field: user_id
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+  - name: cutoff_date
+    description: Inclusive last observation date.
+    tests:
+    - not_null
+  - name: churned
+    description: Future outcome; must never enter the predictor list.
+    tests:
+    - accepted_values:
+        values:
+        - 0
+        - 1
+        quote: false
+  - name: days_since_last_activity
+    description: Recency at cutoff.
+    tests:
+    - not_null
+- name: dim_user
+  description: One row per user; type 1 dimension with namespace-prefixed MD5 surrogate
+    key.
+  columns:
+  - name: user_key
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+- name: dim_product
+  description: One row per product with stable namespace-prefixed surrogate key.
+  columns:
+  - name: product_key
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+- name: dim_feature
+  description: One row per feature with stable namespace-prefixed surrogate key.
+  columns:
+  - name: feature_key
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+- name: dim_date
+  description: One row per UTC calendar date in the configured source horizon.
+  columns:
+  - name: date_key
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+- name: fct_events
+  description: One row per event; nullable feature key for events without a feature.
+  columns:
+  - name: event_key
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+  - name: user_key
+    description: User surrogate key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_user')
+        field: user_key
+  - name: product_key
+    description: Product surrogate key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_product')
+        field: product_key
+  - name: date_key
+    description: UTC date of occurrence or subscription start.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_date')
+        field: date_key
+  - name: feature_key
+    description: Nullable when event has no feature.
+    tests:
+    - relationships:
+        to: ref('dim_feature')
+        field: feature_key
+- name: fct_sessions
+  description: One row per user session; duration measured first-to-last observed
+    event.
+  columns:
+  - name: session_key
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+  - name: user_key
+    description: User surrogate key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_user')
+        field: user_key
+  - name: product_key
+    description: Product surrogate key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_product')
+        field: product_key
+  - name: date_key
+    description: UTC date of occurrence or subscription start.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_date')
+        field: date_key
+- name: fct_transactions
+  description: One row per invoice attempt; failed attempts have zero recognized revenue.
+  columns:
+  - name: transaction_key
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+  - name: user_key
+    description: User surrogate key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_user')
+        field: user_key
+  - name: product_key
+    description: Product surrogate key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_product')
+        field: product_key
+  - name: date_key
+    description: UTC date of occurrence or subscription start.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_date')
+        field: date_key
+- name: fct_subscriptions
+  description: One row per subscription lifetime with start, cancellation and monthly
+    list price.
+  columns:
+  - name: subscription_key
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+  - name: user_key
+    description: User surrogate key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_user')
+        field: user_key
+  - name: product_key
+    description: Product surrogate key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_product')
+        field: product_key
+  - name: date_key
+    description: UTC date of occurrence or subscription start.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_date')
+        field: date_key
+- name: fct_support_tickets
+  description: One row per support ticket with nullable resolution duration.
+  columns:
+  - name: ticket_key
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: product_id
+    description: Product owning this row.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('stg_products')
+        field: product_id
+  - name: user_key
+    description: User surrogate key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_user')
+        field: user_key
+  - name: product_key
+    description: Product surrogate key.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_product')
+        field: product_key
+  - name: date_key
+    description: UTC date of occurrence or subscription start.
+    tests:
+    - not_null
+    - relationships:
+        to: ref('dim_date')
+        field: date_key
+- name: mart_product_metrics
+  description: One row per date and product, including dates with zero activity. Rates
+    retain denominators.
+  columns:
+  - name: metric_key
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+- name: mart_funnel_analysis
+  description: One row per product, channel, country, plan and ordered funnel step.
+    Only 30-day mature signups enter.
+  columns:
+  - name: funnel_key
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+- name: mart_retention_cohorts
+  description: One row per signup month, product, channel and exact-day offset. Immature
+    users excluded from rate denominator.
+  columns:
+  - name: cohort_key
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+- name: mart_feature_adoption
+  description: One row per month, feature and plan; denominator is distinct active
+    users of its product and plan in that month.
+  columns:
+  - name: adoption_key
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+- name: mart_customer_health
+  description: One row per user descriptive snapshot; use for customer segmentation,
+    not predictive features.
+  columns:
+  - name: user_key
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+- name: mart_churn_predictions
+  description: One row per currently eligible scored user; live view over atomic ML
+    output. Not all registered users are eligible.
+  columns:
+  - name: user_id
+    description: Unique key at the documented grain.
+    tests:
+    - not_null
+    - unique
+  - name: churn_probability
+    description: Probability of future 30-day churn.
+    tests:
+    - not_null
+  - name: risk_band
+    description: Fixed probability bands.
+    tests:
+    - accepted_values:
+        values:
+        - low
+        - medium
+        - high
+  - name: scoring_date
+    description: Observation cutoff used for scoring.
+    tests:
+    - not_null
